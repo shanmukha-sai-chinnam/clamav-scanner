@@ -2,9 +2,9 @@
 # ClamAV Sentinel - Unified Management CLI
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SCRIPT_DIR="${CLAMAV_SCANNER_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 PYTHON="${PYTHON:-python3}"
-COMPOSE_FILE="${SCRIPT_DIR}/docker-compose.yml"
+COMPOSE_FILE="${CLAMAV_COMPOSE_FILE:-${SCRIPT_DIR}/docker-compose.yml}"
 
 # Colors
 GREEN='\033[32m'
