@@ -13,7 +13,7 @@
  │                      NixOS-WSL Host                         │
  │                                                             │
  │   New File Created / Written                                │
- │   (/home/damathryxx64/repositories/...)                     │
+ │   (/path/to/watched/directory/...)                          │
  │               │                                             │
  │               ▼                                             │
  │   ┌───────────────────────┐                                 │
@@ -56,7 +56,8 @@
 
 ### 1. Enter Environment
 ```bash
-cd /home/damathryxx64/repositories/clamav-scanner
+git clone https://github.com/shanmukha-sai-chinnam/clamav-scanner.git
+cd clamav-scanner
 nix develop
 # or run commands directly using ./bin/clamav-sentinel
 ```
@@ -77,8 +78,8 @@ nix develop
 # Watch current working directory
 ./bin/clamav-sentinel watch
 
-# Or watch entire repositories folder
-./bin/clamav-sentinel watch /home/damathryxx64/repositories
+# Or watch any specific directory
+./bin/clamav-sentinel watch /path/to/watch
 ```
 
 ---

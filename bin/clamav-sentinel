@@ -40,7 +40,7 @@ Options for 'watch':
 Examples:
   clamav-sentinel up
   clamav-sentinel status
-  clamav-sentinel watch /home/damathryxx64/repositories
+  clamav-sentinel watch /path/to/watch
   clamav-sentinel scan ./suspicious_file.sh
   clamav-sentinel test
 EOF

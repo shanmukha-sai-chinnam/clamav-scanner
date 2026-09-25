@@ -92,19 +92,19 @@
 
             watchDir = mkOption {
               type = types.str;
-              default = "/home/damathryxx64/repositories";
+              default = ".";
               description = "Directory to watch for newly created files";
             };
 
             quarantineDir = mkOption {
               type = types.str;
-              default = "/home/damathryxx64/repositories/.quarantine";
+              default = ".quarantine";
               description = "Directory to store quarantined threats";
             };
 
             auditLog = mkOption {
               type = types.str;
-              default = "/home/damathryxx64/repositories/clamav-audit.jsonl";
+              default = "clamav-audit.jsonl";
               description = "Path to JSONL audit log file";
             };
 
