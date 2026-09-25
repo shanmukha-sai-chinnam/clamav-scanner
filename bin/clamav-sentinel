@@ -1,0 +1,229 @@
+#!/usr/bin/env bash
+# ClamAV Sentinel - Unified Management CLI
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PYTHON="${PYTHON:-python3}"
+COMPOSE_FILE="${SCRIPT_DIR}/docker-compose.yml"
+
+# Colors
+GREEN='\033[32m'
+RED='\033[31;1m'
+YELLOW='\033[33m'
+CYAN='\033[36m'
+BOLD='\033[1m'
+RESET='\033[0m'
+
+print_usage() {
+    cat <<EOF
+${BOLD}ClamAV Sentinel - Real-Time Antivirus Protection${RESET}
+
+Usage:
+  clamav-sentinel [command] [options]
+
+Commands:
+  ${CYAN}up${RESET}              Start ClamAV daemon container in the background
+  ${CYAN}down${RESET}            Stop ClamAV daemon container
+  ${CYAN}restart${RESET}         Restart ClamAV daemon container
+  ${CYAN}status${RESET}          Check daemon container health, ping, and signature version
+  ${CYAN}logs${RESET}            View ClamAV container logs
+  ${CYAN}scan <path>${RESET}     Scan a file or directory on demand
+  ${CYAN}watch [dir]${RESET}     Start real-time file creation monitor (default: current directory)
+  ${CYAN}test${RESET}            Run unit and end-to-end integration tests
+
+Options for 'watch':
+  --watch-dir <path>     Directory to monitor
+  --quarantine-dir <path> Directory for quarantined files (default: .quarantine)
+  --no-quarantine        Disable quarantine, alert only
+  --audit-log <path>     Path to audit log (default: clamav-audit.jsonl)
+
+Examples:
+  clamav-sentinel up
+  clamav-sentinel status
+  clamav-sentinel watch /home/damathryxx64/repositories
+  clamav-sentinel scan ./suspicious_file.sh
+  clamav-sentinel test
+EOF
+}
+
+cmd_up() {
+    echo -e "${CYAN}🚀 Starting ClamAV daemon container...${RESET}"
+    docker compose -f "${COMPOSE_FILE}" up -d
+
+    echo -e "${YELLOW}⏳ Waiting for ClamAV daemon to initialize and load signatures (this may take 30-60s on first run)...${RESET}"
+    local max_retries=60
+    local count=0
+    while [ $count -lt $max_retries ]; do
+        if "${PYTHON}" -c "
+import sys; sys.path.insert(0, '${SCRIPT_DIR}/src')
+from clamav_client import ClamAVClient
+client = ClamAVClient()
+sys.exit(0 if client.ping() else 1)
+" 2>/dev/null; then
+            echo -e "\n${GREEN}✓ ClamAV daemon is healthy and accepting connections!${RESET}"
+            cmd_status
+            return 0
+        fi
+        printf "."
+        sleep 2
+        count=$((count + 1))
+    done
+
+    echo -e "\n${RED}❌ Timeout waiting for ClamAV daemon.${RESET}"
+    echo -e "Check logs with: clamav-sentinel logs"
+    return 1
+}
+
+cmd_down() {
+    echo -e "${CYAN}🛑 Stopping ClamAV daemon container...${RESET}"
+    docker compose -f "${COMPOSE_FILE}" down
+    echo -e "${GREEN}✓ Container stopped.${RESET}"
+}
+
+cmd_restart() {
+    cmd_down
+    cmd_up
+}
+
+cmd_logs() {
+    docker compose -f "${COMPOSE_FILE}" logs -f --tail=100
+}
+
+cmd_status() {
+    echo -e "${BOLD}--- ClamAV Sentinel Status ---${RESET}"
+    
+    # 1. Container status
+    if docker compose -f "${COMPOSE_FILE}" ps --format json 2>/dev/null | grep -q "clamav"; then
+        echo -e "Container:  ${GREEN}RUNNING${RESET}"
+    else
+        echo -e "Container:  ${RED}NOT RUNNING${RESET}"
+    fi
+
+    # 2. Ping check
+    if "${PYTHON}" -c "
+import sys; sys.path.insert(0, '${SCRIPT_DIR}/src')
+from clamav_client import ClamAVClient
+client = ClamAVClient(timeout=2.0)
+if client.ping():
+    print('Connectivity: ${GREEN}OK (clamd responding)${RESET}')
+    print('Version:      ${CYAN}' + client.version() + '${RESET}')
+    sys.exit(0)
+else:
+    print('Connectivity: ${RED}FAILED (Port 3310 not reachable)${RESET}')
+    sys.exit(1)
+" 2>/dev/null; then
+        echo -e "Status:     ${GREEN}ACTIVE${RESET}"
+    else
+        echo -e "Status:     ${YELLOW}INACTIVE / STARTING${RESET}"
+    fi
+}
+
+cmd_scan() {
+    local target="${1:-}"
+    if [ -z "${target}" ]; then
+        echo -e "${RED}Error: Missing target to scan.${RESET} Usage: clamav-sentinel scan <file-or-dir>"
+        exit 1
+    fi
+
+    if [ ! -e "${target}" ]; then
+        echo -e "${RED}Error: Path '${target}' does not exist.${RESET}"
+        exit 1
+    fi
+
+    echo -e "${CYAN}🔍 Scanning: ${target}...${RESET}"
+    "${PYTHON}" -c "
+import sys, os
+from pathlib import Path
+sys.path.insert(0, '${SCRIPT_DIR}/src')
+from clamav_client import ClamAVClient
+
+client = ClamAVClient()
+if not client.ping():
+    print('${RED}❌ Error: ClamAV daemon is not reachable on 127.0.0.1:3310. Run \"clamav-sentinel up\" first.${RESET}')
+    sys.exit(1)
+
+target = Path('${target}').resolve()
+files = [target] if target.is_file() else [p for p in target.rglob('*') if p.is_file()]
+
+infected_count = 0
+clean_count = 0
+
+for f in files:
+    res = client.scan_file(f)
+    if res.is_infected:
+        infected_count += 1
+        print(f'${RED}🚨 [INFECTED] {f} -> {res.virus_name} (${res.latency_ms:.1f}ms)${RESET}')
+    elif res.is_clean:
+        clean_count += 1
+        print(f'${GREEN}✓ [CLEAN] {f} (${f.stat().st_size}B, ${res.latency_ms:.1f}ms)${RESET}')
+    else:
+        print(f'${YELLOW}⚠️ [ERROR] {f} -> {res.raw_response}${RESET}')
+
+print(f'\n${BOLD}Scan Summary:${RESET} {len(files)} scanned | ${GREEN}{clean_count} Clean${RESET} | ${RED}{infected_count} Infected${RESET}')
+sys.exit(1 if infected_count > 0 else 0)
+"
+}
+
+cmd_watch() {
+    local watch_dir="."
+    local extra_args=()
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --watch-dir)
+                watch_dir="$2"
+                shift 2
+                ;;
+            *)
+                if [[ "$1" == -* ]]; then
+                    extra_args+=("$1")
+                    shift
+                else
+                    watch_dir="$1"
+                    shift
+                fi
+                ;;
+        esac
+    done
+
+    echo -e "${CYAN}🛡️  Starting ClamAV Sentinel File Watcher on:${RESET} ${watch_dir}"
+    exec "${PYTHON}" "${SCRIPT_DIR}/src/sentinel.py" --watch-dir "${watch_dir}" "${extra_args[@]}"
+}
+
+cmd_test() {
+    echo -e "${CYAN}🧪 Running unit tests...${RESET}"
+    "${PYTHON}" -m unittest discover -s "${SCRIPT_DIR}/tests" -v
+
+    if [ -f "${SCRIPT_DIR}/tests/test_e2e.sh" ]; then
+        echo -e "\n${CYAN}🧪 Running end-to-end integration tests...${RESET}"
+        bash "${SCRIPT_DIR}/tests/test_e2e.sh"
+    fi
+}
+
+main() {
+    local cmd="${1:-}"
+    if [ -z "${cmd}" ]; then
+        print_usage
+        exit 0
+    fi
+    shift
+
+    case "${cmd}" in
+        up)       cmd_up "$@" ;;
+        down)     cmd_down "$@" ;;
+        restart)  cmd_restart "$@" ;;
+        logs)     cmd_logs "$@" ;;
+        status)   cmd_status "$@" ;;
+        scan)     cmd_scan "$@" ;;
+        watch)    cmd_watch "$@" ;;
+        test)     cmd_test "$@" ;;
+        -h|--help|help) print_usage ;;
+        *)
+            echo -e "${RED}Unknown command: ${cmd}${RESET}"
+            print_usage
+            exit 1
+            ;;
+    esac
+}
+
+main "$@"

@@ -1,0 +1,22 @@
+services:
+  clamav:
+    image: clamav/clamav:latest
+    container_name: clamav-daemon
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3310:3310"
+    environment:
+      - CLAMAV_NO_FRESHCLAMD=false
+      - FRESHCLAM_CHECKS=12
+    volumes:
+      - clamav-db:/var/lib/clamav
+    healthcheck:
+      test: ["CMD-SHELL", "clamdscan --ping 3 || nc -z 127.0.0.1 3310"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+volumes:
+  clamav-db:
+    name: clamav-db-data

@@ -1,0 +1,18 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Test sandboxes and quarantine
+test_sandbox/
+.quarantine/
+*.log
+
+# Nix build outputs
+result
+result-*
+.direnv/
+
+# Local data volumes
+data/
+clamav-db/

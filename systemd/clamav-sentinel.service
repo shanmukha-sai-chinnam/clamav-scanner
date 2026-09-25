@@ -1,0 +1,17 @@
+[Unit]
+Description=ClamAV Real-time File Creation Sentinel
+After=docker.service default.target
+Wants=docker.service
+
+[Service]
+Type=simple
+WorkingDirectory=/home/damathryxx64/repositories/clamav-scanner
+ExecStart=/home/damathryxx64/repositories/clamav-scanner/bin/clamav-sentinel watch /home/damathryxx64/repositories
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target
