@@ -345,10 +345,17 @@ class Sentinel:
 def main():
     parser = argparse.ArgumentParser(description="ClamAV Real-Time File Sentinel")
     parser.add_argument(
+        "watch_dir_pos",
+        nargs="?",
+        default=None,
+        type=Path,
+        help="Directory to watch for file creations (positional)",
+    )
+    parser.add_argument(
         "--watch-dir",
         type=Path,
-        default=Path("."),
-        help="Directory to watch for file creations (default: current directory)",
+        default=None,
+        help="Directory to watch for file creations",
     )
     parser.add_argument("--host", default="127.0.0.1", help="ClamAV daemon host (default: 127.0.0.1)")
     parser.add_argument("--port", type=int, default=3310, help="ClamAV daemon port (default: 3310)")
@@ -377,12 +384,24 @@ def main():
 
     args = parser.parse_args()
 
+    target_dir = (args.watch_dir or args.watch_dir_pos or Path(".")).resolve()
+    quarantine_dir = (
+        args.quarantine_dir.resolve()
+        if args.quarantine_dir.is_absolute()
+        else (target_dir / args.quarantine_dir).resolve()
+    )
+    audit_log = (
+        args.audit_log.resolve()
+        if args.audit_log.is_absolute()
+        else (target_dir / args.audit_log).resolve()
+    )
+
     client = ClamAVClient(host=args.host, port=args.port)
     sentinel = Sentinel(
-        watch_dir=args.watch_dir,
+        watch_dir=target_dir,
         client=client,
-        quarantine_dir=args.quarantine_dir,
-        audit_log=args.audit_log,
+        quarantine_dir=quarantine_dir,
+        audit_log=audit_log,
         recursive=not args.no_recursive,
         auto_quarantine=not args.no_quarantine,
     )
