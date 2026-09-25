@@ -81,7 +81,7 @@ echo -e "${GREEN}✓ Test 1 Passed: Benign file scanned and verified clean.${RES
 # Test 2: Nested Subdirectory Monitoring
 echo -e "\n${CYAN}[Test 2] Testing Recursive Subdirectory Monitoring...${RESET}"
 mkdir -p "${SANDBOX_DIR}/deeply/nested/dir"
-sleep 0.5
+sleep 1.0
 echo "Nested text file" > "${SANDBOX_DIR}/deeply/nested/dir/nested_file.txt"
 sleep 1.0
 

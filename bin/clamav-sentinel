@@ -131,19 +131,22 @@ cmd_scan() {
     fi
 
     echo -e "${CYAN}🔍 Scanning: ${target}...${RESET}"
-    "${PYTHON}" -c "
+    "${PYTHON}" - "${SCRIPT_DIR}" "${target}" <<'EOF'
 import sys, os
 from pathlib import Path
-sys.path.insert(0, '${SCRIPT_DIR}/src')
+
+script_dir = Path(sys.argv[1])
+target = Path(sys.argv[2]).resolve()
+
+sys.path.insert(0, str(script_dir / "src"))
 from clamav_client import ClamAVClient
 
 client = ClamAVClient()
 if not client.ping():
-    print('${RED}❌ Error: ClamAV daemon is not reachable on 127.0.0.1:3310. Run \"clamav-sentinel up\" first.${RESET}')
+    print("\033[31m❌ Error: ClamAV daemon is not reachable on 127.0.0.1:3310. Run 'clamav-sentinel up' first.\033[0m")
     sys.exit(1)
 
-target = Path('${target}').resolve()
-files = [target] if target.is_file() else [p for p in target.rglob('*') if p.is_file()]
+files = [target] if target.is_file() else [p for p in target.rglob("*") if p.is_file()]
 
 infected_count = 0
 clean_count = 0
@@ -152,16 +155,16 @@ for f in files:
     res = client.scan_file(f)
     if res.is_infected:
         infected_count += 1
-        print(f'${RED}🚨 [INFECTED] {f} -> {res.virus_name} (${res.latency_ms:.1f}ms)${RESET}')
+        print(f"\033[31;1m🚨 [INFECTED]\033[0m {f} -> \033[31m{res.virus_name}\033[0m ({res.latency_ms:.1f}ms)")
     elif res.is_clean:
         clean_count += 1
-        print(f'${GREEN}✓ [CLEAN] {f} (${f.stat().st_size}B, ${res.latency_ms:.1f}ms)${RESET}')
+        print(f"\033[32m✓ [CLEAN]\033[0m {f} ({f.stat().st_size}B, {res.latency_ms:.1f}ms)")
     else:
-        print(f'${YELLOW}⚠️ [ERROR] {f} -> {res.raw_response}${RESET}')
+        print(f"\033[33m⚠️ [ERROR]\033[0m {f} -> {res.raw_response}")
 
-print(f'\n${BOLD}Scan Summary:${RESET} {len(files)} scanned | ${GREEN}{clean_count} Clean${RESET} | ${RED}{infected_count} Infected${RESET}')
+print(f"\n\033[1mScan Summary:\033[0m {len(files)} scanned | \033[32m{clean_count} Clean\033[0m | \033[31m{infected_count} Infected\033[0m")
 sys.exit(1 if infected_count > 0 else 0)
-"
+EOF
 }
 
 cmd_watch() {

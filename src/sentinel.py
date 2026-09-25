@@ -137,6 +137,11 @@ class Sentinel:
 
     def should_ignore(self, path: Path) -> bool:
         """Filter out internal / build / temp directories."""
+        resolved = path.resolve()
+        if resolved == self.audit_log:
+            return True
+        if path.name.endswith(".jsonl") or path.name.endswith(".log"):
+            return True
         # Check parts against ignore list
         for part in path.parts:
             if part in self.IGNORE_DIRS:
@@ -313,11 +318,16 @@ class Sentinel:
                     # If a new directory was created, watch it recursively
                     if mask & IN_ISDIR and (mask & (IN_CREATE | IN_MOVED_TO)):
                         if self.recursive and not self.should_ignore(full_path):
-                            try:
-                                self.watcher.add_watch(full_path)
-                                print(f"{COLOR_CYAN}📂 Subdirectory watch added:{COLOR_RESET} {full_path}")
-                            except OSError:
-                                pass
+                            for root, dirs, files in os.walk(full_path):
+                                dirs[:] = [d for d in dirs if d not in self.IGNORE_DIRS and not d.startswith(".")]
+                                p = Path(root)
+                                try:
+                                    self.watcher.add_watch(p)
+                                    print(f"{COLOR_CYAN}📂 Subdirectory watch added:{COLOR_RESET} {p}")
+                                except OSError:
+                                    pass
+                                for f in files:
+                                    self.handle_file(p / f)
                         continue
 
                     # If a regular file creation / moved / write event
